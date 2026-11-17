@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VELMARA: Streets of Gold — an open-world crime game</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0e14;
+    font-family: 'Trebuchet MS', Verdana, sans-serif; color: #f2f2f2; }
+  #game-wrap { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+  #game { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  .hud { position: absolute; pointer-events: none; z-index: 5; }
+  .panel { background: rgba(8, 12, 20, 0.72); border: 1px solid rgba(245, 197, 66, 0.45);
+    border-radius: 8px; padding: 8px 12px; backdrop-filter: blur(2px); }
+
+  /* Mission objective, top-left */
+  #objective { top: 14px; left: 14px; max-width: 340px; border-left: 4px solid #f5c542; }
+  #obj-title { font-size: 13px; letter-spacing: 2px; color: #f5c542; font-weight: bold; text-transform: uppercase; }
+  #obj-text { font-size: 15px; line-height: 1.35; margin-top: 2px; text-shadow: 0 1px 2px #000; }
+  #obj-dist { font-size: 12px; color: #9fd8ff; margin-top: 2px; }
+
+  /* Stats, top-right */
+  #stats { top: 14px; right: 14px; text-align: right; }
+  #stars { font-size: 26px; letter-spacing: 3px; color: #f5c542; text-shadow: 0 0 8px rgba(245,197,66,.7), 0 2px 2px #000; line-height: 1; }
+  #stars .off { color: rgba(255,255,255,0.25); text-shadow: none; }
+  #cash { font-size: 22px; font-weight: bold; color: #7dff8a; text-shadow: 0 2px 2px #000; margin-top: 4px; }
+  #clock { font-size: 14px; color: #dfe8ff; margin-top: 2px; text-shadow: 0 1px 2px #000; }
+
+  /* Minimap, bottom-left */
+  #minimap-wrap { bottom: 14px; left: 14px; }
+  #minimap { display: block; border: 2px solid rgba(245,197,66,0.6); border-radius: 6px; background: #101820; }
+  #district { font-size: 12px; color: #ffe9a8; margin-top: 4px; letter-spacing: 1px; text-shadow: 0 1px 2px #000; }
+
+  /* Health + weapon, bottom-right */
+  #vitals { bottom: 14px; right: 14px; width: 230px; text-align: right; }
+  #health-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+  #health-label { font-size: 12px; letter-spacing: 2px; color: #ffb3b3; }
+  #health-bar { width: 160px; height: 14px; background: rgba(0,0,0,0.6); border: 1px solid #fff3; border-radius: 7px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #37d67a, #a5e34d); transition: width .15s; }
+  #weapon { font-size: 15px; margin-top: 6px; text-shadow: 0 1px 2px #000; }
+  #weapon b { color: #ffd76a; }
+
+  /* Center banner for MISSION PASSED / WASTED / BUSTED */
+  #banner { top: 22%; left: 50%; transform: translateX(-50%); text-align: center; display: none; }
+  #banner-title { font-family: Impact, 'Arial Black', sans-serif; font-size: 54px; letter-spacing: 4px;
+    color: #f5c542; text-shadow: 0 3px 0 #7a5b00, 0 6px 18px rgba(0,0,0,0.8); }
+  #banner-title.bad { color: #ff5a4e; text-shadow: 0 3px 0 #5b0a06, 0 6px 18px rgba(0,0,0,0.8); }
+  #banner-sub { font-size: 18px; color: #fff; text-shadow: 0 2px 3px #000; margin-top: 4px; }
+
+  /* Subtitles + hints, bottom-center */
+  #subtitle { bottom: 108px; left: 50%; transform: translateX(-50%); max-width: 640px; text-align: center;
+    font-size: 17px; line-height: 1.4; color: #fff; text-shadow: 0 2px 3px #000, 0 0 12px rgba(0,0,0,.9); display: none; }
+  #subtitle .who { color: #ffd76a; font-weight: bold; }
+  #hint { bottom: 14px; left: 50%; transform: translateX(-50%); font-size: 13px; color: rgba(255,255,255,0.85);
+    text-shadow: 0 1px 2px #000; background: rgba(8,12,20,0.55); padding: 5px 12px; border-radius: 20px; }
+  #toast { top: 84px; left: 50%; transform: translateX(-50%); font-size: 16px; font-weight: bold; color: #ffe9a8;
+    text-shadow: 0 2px 3px #000; display: none; }
+
+  /* Damage vignette + night tint are drawn on canvas; this is the red hurt flash */
+  #hurt { position: absolute; inset: 0; pointer-events: none; z-index: 4; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,0.45) 100%); }
+
+  /* Full-screen overlays: title, pause, end */
+  .overlay { position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: linear-gradient(180deg, rgba(10,14,28,0.25) 0%, rgba(10,14,28,0.55) 55%, rgba(8,8,18,0.88) 100%); }
+  .overlay h1 { font-family: Impact, 'Arial Black', sans-serif; font-size: 92px; letter-spacing: 10px;
+    color: #f5c542; text-shadow: 0 4px 0 #7a5b00, 0 10px 30px rgba(0,0,0,0.9); line-height: 0.95; }
+  .overlay h2 { font-size: 26px; letter-spacing: 12px; color: #fff; text-shadow: 0 2px 8px #000; margin-top: 6px; }
+  .overlay .tagline { margin-top: 14px; font-size: 16px; color: #ffe9a8; max-width: 560px; line-height: 1.5; text-shadow: 0 2px 4px #000; }
+  .overlay .story { margin-top: 10px; font-size: 14px; color: #dfe8ff; max-width: 600px; line-height: 1.55; text-shadow: 0 2px 4px #000; }
+  .controls-grid { margin-top: 18px; display: grid; grid-template-columns: auto auto; gap: 4px 22px;
+    font-size: 14px; color: #e8ecf5; text-align: left; text-shadow: 0 1px 2px #000; }
+  .controls-grid b { color: #ffd76a; font-weight: bold; }
+  .btn-row { margin-top: 22px; display: flex; gap: 14px; }
+  button { pointer-events: auto; cursor: pointer; font-family: inherit; font-size: 17px; font-weight: bold;
+    letter-spacing: 2px; color: #1a1206; background: linear-gradient(180deg, #ffe08a, #f5c542);
+    border: none; border-radius: 8px; padding: 12px 26px; box-shadow: 0 4px 0 #8a6d1a, 0 8px 18px rgba(0,0,0,0.5); }
+  button:hover { filter: brightness(1.08); }
+  button:active { transform: translateY(2px); box-shadow: 0 2px 0 #8a6d1a; }
+  button.ghost { background: rgba(255,255,255,0.12); color: #fff; box-shadow: 0 4px 0 rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.35); }
+  .overlay .foot { margin-top: 20px; font-size: 12px; color: rgba(255,255,255,0.6); }
+  #pause-screen, #end-screen { display: none; }
+  #end-title { font-family: Impact, 'Arial Black', sans-serif; font-size: 84px; letter-spacing: 8px; color: #ff5a4e;
+    text-shadow: 0 4px 0 #5b0a06, 0 10px 30px rgba(0,0,0,0.9); }
+  #end-sub { font-size: 17px; color: #fff; margin-top: 8px; text-shadow: 0 2px 4px #000; }
+  #loading { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+    background: #0b0e14; font-size: 18px; letter-spacing: 3px; color: #f5c542; }
+</style>
+</head>
+<body>
+<div id="game-wrap">
+  <canvas id="game"></canvas>
+  <div id="hurt"></div>
+
+  <div id="objective" class="hud panel">
+    <div id="obj-title">Velmara</div>
+    <div id="obj-text">Welcome to Velmara.</div>
+    <div id="obj-dist"></div>
+  </div>
+
+  <div id="stats" class="hud panel">
+    <div id="stars"></div>
+    <div id="cash">$150</div>
+    <div id="clock">Day 1 — 08:00</div>
+  </div>
+
+  <div id="minimap-wrap" class="hud">
+    <canvas id="minimap" width="220" height="160"></canvas>
+    <div id="district">Casco Viejo</div>
+  </div>
+
+  <div id="vitals" class="hud panel">
+    <div id="health-row"><span id="health-label">HEALTH</span><div id="health-bar"><div id="health-fill"></div></div></div>
+    <div id="weapon">Fists</div>
+  </div>
+
+  <div id="banner" class="hud"><div id="banner-title"></div><div id="banner-sub"></div></div>
+  <div id="subtitle" class="hud"></div>
+  <div id="toast" class="hud"></div>
+  <div id="hint" class="hud">WASD move &nbsp;·&nbsp; SHIFT run &nbsp;·&nbsp; E enter car &nbsp;·&nbsp; Mouse aim, Click shoot &nbsp;·&nbsp; 1/2 weapon &nbsp;·&nbsp; P pause &nbsp;·&nbsp; M sound</div>
+
+  <div id="title-screen" class="overlay">
+    <h1>VELMARA</h1>
+    <h2>STREETS OF GOLD</h2>
+    <div class="tagline">A sun-soaked harbor city. One courier. Five jobs. Every siren in town.</div>
+    <div class="story">Riko Vale came to Velmara with a busted scooter and a debt.
+      Marisol, the fixer of Puerto del Sol, offers him a way out: run her jobs, earn the gold,
+      and don't get caught. Steal cars, outrun the Velmara police, and take back the streets —
+      on foot or behind the wheel.</div>
+    <div class="controls-grid">
+      <span><b>W A S D</b> — move / drive</span><span><b>Mouse</b> — aim, Click — shoot / punch</span>
+      <span><b>SHIFT</b> — sprint / handbrake</span><span><b>E</b> — enter / exit car</span>
+      <span><b>1 / 2</b> — fists / pistol</span><span><b>P</b> — pause &amp; save &nbsp; <b>M</b> — sound</span>
+    </div>
+    <div class="btn-row">
+      <button id="btn-new">NEW GAME</button>
+      <button id="btn-continue" class="ghost" style="display:none">CONTINUE</button>
+      <button id="btn-sound" class="ghost">SOUND: ON</button>
+    </div>
+    <div class="foot">An original game. Velmara, its people and its cars are invented — nothing is borrowed from any commercial game.</div>
+  </div>
+
+  <div id="pause-screen" class="overlay">
+    <h1 style="font-size:64px">PAUSED</h1>
+    <h2>VELMARA — STREETS OF GOLD</h2>
+    <div class="btn-row">
+      <button id="btn-resume">RESUME</button>
+      <button id="btn-save" class="ghost">SAVE GAME</button>
+      <button id="btn-quit" class="ghost">QUIT TO TITLE</button>
+    </div>
+    <div class="foot" id="pause-info"></div>
+  </div>
+
+  <div id="end-screen" class="overlay">
+    <div id="end-title">WASTED</div>
+    <div id="end-sub"></div>
+    <div class="btn-row">
+      <button id="btn-retry">TRY AGAIN</button>
+      <button id="btn-end-quit" class="ghost">QUIT TO TITLE</button>
+    </div>
+  </div>
+
+  <div id="loading">LOADING VELMARA…</div>
+</div>
+
+<script src="src/config.js"></script>
+<script src="src/random.js"></script>
+<script src="src/city.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/input.js"></script>
+<script src="src/peds.js"></script>
+<script src="src/vehicles.js"></script>
+<script src="src/police.js"></script>
+<script src="src/player.js"></script>
+<script src="src/missions.js"></script>
+<script src="src/hud.js"></script>
+<script src="src/render.js"></script>
+<script src="src/shots.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>
